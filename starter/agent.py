@@ -35,8 +35,28 @@ class Agent:
     def reset(self, session_id: str, user_profile: dict) -> None:
         self._sessions[session_id] = SessionState(
             session_id=session_id,
-            user_profile=user_profile if isinstance(user_profile, dict) else {},
+            user_profile=self._sanitize_profile(user_profile),
         )
+
+    @staticmethod
+    def _sanitize_profile(user_profile: object) -> dict:
+        """Validate profile fields once so downstream code never re-checks:
+        a string preference_tags would otherwise iterate character-by-character,
+        and NaN ratings would contaminate sorting."""
+        import math
+        profile = dict(user_profile) if isinstance(user_profile, dict) else {}
+        tags = profile.get("preference_tags")
+        profile["preference_tags"] = (
+            [str(tag) for tag in tags if isinstance(tag, str)][:20]
+            if isinstance(tags, list) else []
+        )
+        rating = profile.get("average_prior_rating")
+        profile["average_prior_rating"] = (
+            float(rating)
+            if isinstance(rating, (int, float)) and math.isfinite(rating) else None
+        )
+        profile["rating_style"] = str(profile.get("rating_style") or "")
+        return profile
 
     def respond(self, session_id: str, user_message: str, turn: int, top_k: int) -> dict:
         try:

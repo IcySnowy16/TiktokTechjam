@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import os
 import re
 from difflib import SequenceMatcher
 
-try:  # optional accelerator, never required
-    from rapidfuzz import fuzz as _rf_fuzz
-except ImportError:
-    _rf_fuzz = None
+# difflib is the CANONICAL matcher: rapidfuzz scores borderline pairs slightly
+# differently, so an ambient install must not silently change parsing between
+# environments. Accelerate only on explicit opt-in.
+_rf_fuzz = None
+if os.environ.get("TECHJAM_ENABLE_RAPIDFUZZ") == "1":
+    try:
+        from rapidfuzz import fuzz as _rf_fuzz  # type: ignore[no-redef]
+    except ImportError:
+        _rf_fuzz = None
 
 TOKEN_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 STOPWORDS = {

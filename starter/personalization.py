@@ -32,6 +32,8 @@ def rating_prior(product: dict, rating_style: str) -> float:
         count = float(product.get("rating_number") or 0.0)
     except (TypeError, ValueError):
         return 0.0
+    if not (math.isfinite(average) and math.isfinite(count)) or average < 0 or count < 0:
+        return 0.0
     score = (average / 5.0) * min(1.0, math.log1p(count) / math.log1p(10000))
     if "critical" in (rating_style or "").lower():
         score *= 0.5

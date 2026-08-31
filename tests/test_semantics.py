@@ -418,3 +418,19 @@ class RecencyTest(unittest.TestCase):
             retriever._phrase_score(plain, doc),
             "recency factor cancels out for a lone value (numerator AND denominator)",
         )
+
+
+class ProfileRobustnessTest(unittest.TestCase):
+    def test_string_tags_and_nan_rating_sanitized(self):
+        from starter.agent import Agent
+        agent = Agent.__new__(Agent)
+        agent._sessions = {}
+        agent.reset("s", {"preference_tags": "comfort", "average_prior_rating": float("nan")})
+        profile = agent._sessions["s"].user_profile
+        self.assertEqual(profile["preference_tags"], [],
+                         "a string preference_tags must not survive as iterable chars")
+        self.assertIsNone(profile["average_prior_rating"])
+
+    def test_nan_product_rating_scores_zero(self):
+        from starter.personalization import rating_prior
+        self.assertEqual(rating_prior({"average_rating": float("nan"), "rating_number": 50}, ""), 0.0)
