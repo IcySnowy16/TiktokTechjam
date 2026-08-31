@@ -1,9 +1,12 @@
 """Optional LLM layer: phrasing variety and capped-risk re-ranking, with a circuit breaker.
 
 The technical score is fully realized with this disabled — the evaluator reads
-ask_attribute, never message prose. Enabled only when an API key is present AND
-the anthropic SDK imports; the first failure of any kind disables it for the
-rest of the process so the agent silently degrades to templates offline.
+ask_attribute, never message prose. Enabled only with EXPLICIT opt-in:
+TECHJAM_ENABLE_LLM=1 must be set in addition to an API key and an importable
+anthropic SDK — an ambient key alone never triggers network calls, so official
+scoring stays deterministic and cost-free by default. The first failure of any
+kind disables it for the rest of the process so the agent silently degrades to
+templates offline.
 Token usage is read from the real API response, never estimated.
 """
 
@@ -23,8 +26,9 @@ class LLMAdapter:
         self.timeout_s = timeout_s
         self._client = None
         self._last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
+        opted_in = os.environ.get("TECHJAM_ENABLE_LLM") == "1"
         key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-        if key:
+        if opted_in and key:
             try:
                 import anthropic
                 self._client = anthropic.Anthropic(api_key=key, timeout=timeout_s)
