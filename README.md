@@ -37,17 +37,32 @@ Requirements: **Python 3.10+** with sqlite3 FTS5 (standard on python.org builds)
 scored agent has **no required third-party dependencies** (`starter/requirements.txt`
 lists optional extras only).
 
-```bash
-git clone <this-repo>
-cd <this-repo>
+**macOS / Linux:**
 
-# Get the catalog (58 MB, not in the repo):
-#   download catalog.jsonl.gz from the organizer's participant-kit release:
-#   https://github.com/TechJam2026/techjam-conversational-search/releases/tag/participant-kit
+```bash
+git clone https://github.com/IcySnowy16/TiktokTechjam.git
+cd TiktokTechjam
+
+# Get the catalog (58 MB, not in the repo) from the organizer's participant-kit release:
+curl -LO https://github.com/TechJam2026/techjam-conversational-search/releases/download/participant-kit/catalog.jsonl.gz
+
+# Verify it against the checksum shipped in this repo (must match the first line):
+shasum -a 256 catalog.jsonl.gz
+cat SHA256SUMS.txt
+
 gzip -dk catalog.jsonl.gz
 mv catalog.jsonl data/catalog.jsonl
-# verify: SHA256 of the .gz must match the release's SHA256SUMS
 ```
+
+**Windows (PowerShell):** same flow — clone, then:
+
+```powershell
+Invoke-WebRequest https://github.com/TechJam2026/techjam-conversational-search/releases/download/participant-kit/catalog.jsonl.gz -OutFile catalog.jsonl.gz
+Get-FileHash catalog.jsonl.gz -Algorithm SHA256   # compare with SHA256SUMS.txt
+# decompress with 7-Zip/gzip, then place as data\catalog.jsonl
+```
+
+On macOS/Linux use `python3` for every command below; on Windows, `python`.
 
 ## Steps to reproduce our results
 
