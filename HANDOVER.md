@@ -95,11 +95,11 @@ python -m evaluator.local_evaluator       # expect score ≈ 0.8216
 python -m unittest discover -s tests      # if you also copy tests/: 57 green
 ```
 
-### 2.4 Devpost writeup — 1–2 hours
-Adapt `SOLUTION.md` (it already contains everything the deliverables list asks for:
-approach, tools, libraries, datasets, cost/token/latency disclosure). Add: team name,
-track selection, repo link (public GitHub — push the repo to the team fork first,
-NEVER to the organizer's repo), and the video link from 2.5.
+### 2.4 Devpost writeup — 30 minutes
+`DEVPOST.md` is a ready-to-paste draft covering every required section (problem fit,
+tools, APIs, libraries, datasets). Fill its two [[FILL]] blocks (team + links), paste
+into the Devpost form. The public-repo `README.md` is likewise ready — fill its Team
+Contributions block, push to the TEAM FORK (never the organizer repo), make it public.
 
 ### 2.5 Demo video — half a day
 Public YouTube, linked in Devpost. Suggested 3-minute storyline, all of it real:

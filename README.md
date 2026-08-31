@@ -1,111 +1,99 @@
-# TechJam Conversational E-Commerce Search Challenge
+# Stateful Conversational Shopping Agent — TechJam 2026 Track 4
 
-Build an AI shopping agent that asks useful follow-up questions and recommends the customer's hidden target product within at most 10 turns.
+A multi-turn shopping copilot for the TechJam Conversational E-Commerce Search Challenge:
+given an anonymized shopper profile and a conversation of up to 10 turns, find the hidden
+target product in a frozen 50,000-item catalog by asking the right clarifying questions
+and ranking with hybrid retrieval.
 
-## What You Receive
+**Result:** TechnicalScore **0.8216** on the official 200-session public evaluator
+(organizer baseline: 0.107) — HitRate@10 0.965, MRR 0.600, mean conversion in 3.05 turns —
+with **zero LLM tokens, no network access**, and bit-identical results across Python hash
+seeds. Grouped holdout check shows no overfitting gap (dev 0.8158 / holdout 0.8458).
 
-- A frozen catalog of 50,000 products from the `Clothing_Shoes_and_Jewelry` category of Amazon Reviews 2023.
-- 200 labeled public sessions for local development.
-- A weak BM25 starter agent and deterministic local evaluator.
-- The Agent API contract and scoring rules.
+> The organizer's original challenge README is preserved unchanged as
+> [`ORGANIZER_README.md`](ORGANIZER_README.md). Competition rules and data documentation
+> live in [`docs/`](docs/) and are untouched.
 
-The organizer keeps 800 additional sessions private for final evaluation.
+## Project overview
 
-## Task
+The provided starter agent was stateless and never asked questions. This agent replaces it
+with a five-step pipeline, run every turn (all code in [`starter/`](starter/)):
 
-For each session, your agent receives an anonymized preference profile and a short customer message. Raw user IDs, review text, timestamps, and purchase history are never disclosed. On every turn the agent may:
+| Step | Module | What it does |
+|---|---|---|
+| 1. Parse | `dialog_state.py` | Clause-by-clause classification into typed slots with **polarity** (negations exclude), boundary handling ("no preference" retires an attribute), and **scoped intent overrides** (category-wide vs attribute-local) |
+| 2. Retrieve | `retriever.py`, `catalog_store.py` | Cumulative BM25 (SQLite FTS5) recall → polarity-aware attribute scoring with **typed budgets** (under/over/between/around) → idf-weighted **phrase-coverage boost** → TF-IDF → profile personalization |
+| 3. Ask | `question_policy.py` | Deterministic question selection maximizing reveal-prior × pool-splitting entropy; never re-asks answered attributes; stops when confident |
+| 4. Adapt | `agent.py` | Signature-based stall detection → filter relaxation (runtime strategy re-orchestration) |
+| 5. Guard | `safety.py` | Single schema-validating choke point; transactional per-turn state; two fallback tiers so `respond()` never raises after construction |
 
-- ask a natural clarification question in `message` and identify one requested field in `ask_attribute`;
-- return a ranked list of up to 10 catalog `parent_asin` values;
-- do both in the same response.
+Supporting: `explain.py` (per-turn decision trace), `llm_adapter.py` (optional,
+opt-in-only phrasing layer with circuit breaker), `config.py` (every tunable in one place).
 
-The session ends when the target product appears in the scored Top 10 or after turn 10. Sessions cover Buying, Browsing, Intent Override, and Boundary behavior.
+## Setup and installation
 
-## Download the Catalog
-
-Download `catalog.jsonl.gz` from the GitHub Release attached to this repository, then run:
+Requirements: **Python 3.10+** with sqlite3 FTS5 (standard on python.org builds). The
+scored agent has **no required third-party dependencies** (`starter/requirements.txt`
+lists optional extras only).
 
 ```bash
+git clone <this-repo>
+cd <this-repo>
+
+# Get the catalog (58 MB, not in the repo):
+#   download catalog.jsonl.gz from the organizer's participant-kit release:
+#   https://github.com/TechJam2026/techjam-conversational-search/releases/tag/participant-kit
 gzip -dk catalog.jsonl.gz
 mv catalog.jsonl data/catalog.jsonl
+# verify: SHA256 of the .gz must match the release's SHA256SUMS
 ```
 
-Verify the downloaded file using the published `SHA256SUMS` file.
-
-## Run the Starter
-
-Python 3.10 or later is recommended. The starter uses only the Python standard library.
+## Steps to reproduce our results
 
 ```bash
-python3 -m evaluator.local_evaluator
+python -m evaluator.local_evaluator      # official scorer -> results.json  (expect ~0.8216)
+python -m unittest discover -s tests     # 57 tests: semantics, policy, retriever, contract, leakage guards
+python -m tools.holdout_eval             # grouped dev/holdout split (dev harness only)
+python -m tools.build_submission         # minimal leak-checked submission bundle
 ```
 
-Edit `starter/agent.py` to implement your system. Do not edit the evaluator or public labels when reporting your local score.
-The command writes per-session results and aggregate metrics to `results.json`.
+Determinism: results are identical under different `PYTHONHASHSEED` values. Optional env
+flags (both off by default): `TECHJAM_ENABLE_LLM=1` (+ `ANTHROPIC_API_KEY` + `anthropic`
+package) enables the phrasing layer; `TECHJAM_ENABLE_RAPIDFUZZ=1` enables the fuzzy-match
+accelerator. Never commit keys.
 
-The included weak BM25 starter scores Hit Rate@10 `0.125`, MRR `0.068034`, and
-MTTC `9.81` on the released public set. See `docs/baseline_results.json`.
+Full method, measured milestone-by-milestone results, cost/latency disclosure, and the
+change-by-change regression history: [`SOLUTION.md`](SOLUTION.md) and
+[`REGRESSION_LOG.md`](REGRESSION_LOG.md).
 
-## Agent Interface
+## Limitations, and what we would improve given more time
 
-```python
-class Agent:
-    def reset(self, session_id: str, user_profile: dict) -> None:
-        ...
+- **Simulator coupling.** The public simulator derives constraints near-verbatim from the
+  target's own catalog fields and our phrase-coverage stage exploits that structure —
+  legal use of visible mechanics, but public scores likely overstate robustness to free
+  human phrasing. We narrowed the gap with 31 hand-written adversarial tests (negation,
+  mixed clauses, category switches, typed budgets) and a grouped holdout split; we did not
+  close it.
+- **Single recall gate.** Everything downstream re-ranks BM25's top 300; a target missed
+  there is unrecoverable. Given more time: multi-route recall (category, latest-clause,
+  synonym routes) fused with reciprocal-rank fusion, measured on recall separately.
+- **Vocabulary-driven classification.** Paraphrases outside `vocab.py` fall back to the
+  generic "feature" slot — retrievable via phrase coverage but invisible to attribute
+  filtering. Double negation and colon-quoted negated constraints are not understood.
+- **Memory (~890 MiB peak measured pre-bounding; caches now LRU-capped)** is acceptable,
+  not lean — field pruning and token-ID compaction were deliberately deferred.
+- Given more time we would also ship the conversation-replay visualization (the per-turn
+  decision trace in `explain.py` already records pool sizes and question rationale) and a
+  learned reranker gated on holdout — not public — improvement.
 
-    def respond(self, session_id: str, user_message: str, turn: int, top_k: int) -> dict:
-        return {
-            "message": "Do you have a material preference?",
-            "ask_attribute": "material",
-            "recommendations": [
-                {"parent_asin": "B000..."},
-                {"parent_asin": "B001..."}
-            ],
-            "usage": {"prompt_tokens": 120, "completion_tokens": 30}
-        }
-```
+## Team member contributions
 
-`ask_attribute` is one of `category`, `material`, `color`, `size`, `style`, `brand`, `budget`, `feature`, `use_case`, `other`, or `null`. See `docs/agent_api_contract.json`.
+[[FILL BEFORE MAKING THE REPO PUBLIC: one line per member — who built/tuned what
+(state machine, retrieval, tests, docs, demo video, Devpost) — or state that this is a
+solo submission. Do not ship this placeholder.]]
 
-## Technical Metrics
+## Data attribution
 
-- **Hit Rate@10:** fraction of sessions that find the target within 10 turns.
-- **MRR:** mean reciprocal rank of the target; a miss contributes zero.
-- **MTTC:** mean first-hit turn; a miss is assigned turn 11.
-- **Reported token usage:** prompt and completion tokens returned by the team's model client.
-
-```text
-TechnicalScore = 0.50 × HitRate@10 + 0.30 × MRR + 0.20 × Efficiency
-Efficiency = clip((11 - MTTC) / 10, 0, 1)
-```
-
-Only exact `parent_asin` equality produces a hit. Core metrics are also reported by scenario.
-
-## Model Choice and Cost
-
-Teams may use any legally accessible LLM API or local model. Teams manage their own credentials and must never commit API keys. Model choice, estimated cost, token usage, and latency must be disclosed. Token usage is a feasibility metric, not part of the core technical score. The organizer does not provide or reimburse model API credits; teams are responsible for any costs incurred through optional external services.
-
-## Files
-
-```text
-data/public_set.jsonl             200 labeled development sessions
-docs/competition_specification.md participant rules and evaluation protocol
-docs/agent_api_contract.json      machine-readable Agent contract
-docs/evaluation_config.json       scoring configuration
-docs/baseline_results.json        reproducible weak-starter reference score
-starter/agent.py                  editable weak starter
-evaluator/local_evaluator.py      public-set simulator and scorer
-```
-
-## Judging and Submission Policy
-
-- Participant submission requirements: `docs/submission_rules.md`
-- Participant release checklist: `docs/participant_release_checklist.md`
-- Organizer-only final judging controls: `organizer/JUDGING_RUNBOOK.md`
-- Organizer private release checklist: `organizer/private_release_checklist.md`
-- Judging day operations SOP: `organizer/JUDGING_DAY_SOP.md`
-
-## Data Source
-
-The catalog and sessions are derived from Amazon Reviews 2023 by McAuley Lab, UCSD. See `DATA_ATTRIBUTION.md` before using or redistributing the data.
-Sessions are sampled deterministically from the official Clothing 5-core leave-last-out split and joined to the frozen catalog.
+Derived from Amazon Reviews 2023 (McAuley Lab, UCSD) via the organizer's frozen
+competition kit — see [`DATA_ATTRIBUTION.md`](DATA_ATTRIBUTION.md). No external training
+data was used.
