@@ -5,10 +5,11 @@ given an anonymized shopper profile and a conversation of up to 10 turns, find t
 target product in a frozen 50,000-item catalog by asking the right clarifying questions
 and ranking with hybrid retrieval.
 
-**Result:** TechnicalScore **0.8216** on the official 200-session public evaluator
-(organizer baseline: 0.107) — HitRate@10 0.965, MRR 0.600, mean conversion in 3.05 turns —
+**Result:** TechnicalScore **0.8264** on the official 200-session public evaluator
+(organizer baseline: 0.107) — HitRate@10 0.975, MRR 0.593, mean conversion in 2.95 turns —
 with **zero LLM tokens, no network access**, and bit-identical results across Python hash
-seeds. Grouped holdout check shows no overfitting gap (dev 0.8158 / holdout 0.8458).
+seeds. A grouped holdout check shows no overfitting gap (dev 0.8158 / holdout 0.8458,
+measured at the 0.8216 pre-demo-fix configuration).
 
 > The organizer's original challenge README is preserved unchanged as
 > [`ORGANIZER_README.md`](ORGANIZER_README.md). Competition rules and data documentation
@@ -51,8 +52,8 @@ mv catalog.jsonl data/catalog.jsonl
 ## Steps to reproduce our results
 
 ```bash
-python -m evaluator.local_evaluator      # official scorer -> results.json  (expect ~0.8216)
-python -m unittest discover -s tests     # 57 tests: semantics, policy, retriever, contract, leakage guards
+python -m evaluator.local_evaluator      # official scorer -> results.json  (expect ~0.8264)
+python -m unittest discover -s tests     # 61 tests: semantics, policy, retriever, contract, leakage guards
 python -m tools.holdout_eval             # grouped dev/holdout split (dev harness only)
 python -m tools.build_submission         # minimal leak-checked submission bundle
 ```
@@ -71,7 +72,7 @@ change-by-change regression history: [`SOLUTION.md`](SOLUTION.md) and
 - **Simulator coupling.** The public simulator derives constraints near-verbatim from the
   target's own catalog fields and our phrase-coverage stage exploits that structure —
   legal use of visible mechanics, but public scores likely overstate robustness to free
-  human phrasing. We narrowed the gap with 31 hand-written adversarial tests (negation,
+  human phrasing. We narrowed the gap with hand-written adversarial tests (negation,
   mixed clauses, category switches, typed budgets) and a grouped holdout split; we did not
   close it.
 - **Single recall gate.** Everything downstream re-ranks BM25's top 300; a target missed
@@ -88,9 +89,12 @@ change-by-change regression history: [`SOLUTION.md`](SOLUTION.md) and
 
 ## Team member contributions
 
-[[FILL BEFORE MAKING THE REPO PUBLIC: one line per member — who built/tuned what
-(state machine, retrieval, tests, docs, demo video, Devpost) — or state that this is a
-solo submission. Do not ship this placeholder.]]
+Team: KE$HA
+1. Wang Zilu
+2. Lim Wei Feng Leo
+3. Guan Chen Di
+4. Dylan Yap
+5. Damien Tan
 
 ## Data attribution
 

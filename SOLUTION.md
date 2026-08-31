@@ -145,5 +145,9 @@ enables the phrasing layer; `TECHJAM_ENABLE_RAPIDFUZZ=1` enables the fuzzy-match
 
 ## Team Contributions
 
-TODO before Devpost submission: replace with actual member names and roles, or state explicitly
-that this is a solo submission. (Submission blocker — do not ship this placeholder.)
+Team: KE$HA
+1. Wang Zilu
+2. Lim Wei Feng Leo
+3. Guan Chen Di
+4. Dylan Yap
+5. Damien Tan
