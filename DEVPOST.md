@@ -1,6 +1,6 @@
-# Devpost Written Project Description — copy-paste source
+# Devpost Project Description
 
-> Paste the sections below into the Devpost form. Fill the two [[FILL]] blocks first.
+Source text for Team KE$HA's Devpost submission (Track 4).
 
 ---
 
@@ -41,8 +41,8 @@ mapping directly onto the problem statement's pillars:
    deterministic evaluator, logged in `REGRESSION_LOG.md`, and checked on a grouped
    holdout split that was never used for tuning.
 
-**Results** (official local evaluator, 200 public sessions): TechnicalScore **0.8216** vs
-the organizer baseline's 0.107 — HitRate@10 0.965, MRR 0.600, mean conversion in 3.05
+**Results** (official local evaluator, 200 public sessions): TechnicalScore **0.8264** vs
+the organizer baseline's 0.107 — HitRate@10 0.975, MRR 0.593, mean conversion in 2.95
 turns — achieved with **zero LLM tokens and no network access**, and bit-identical across
 Python hash seeds. Grouped holdout check: dev 0.8158 vs holdout 0.8458 — no overfitting
 gap. Two findings we're proud of: textbook information-gain question selection made the
@@ -69,7 +69,7 @@ wishes) — both measured, both documented.
 ## Libraries and frameworks used
 
 - **Python standard library only** for the scored path: `sqlite3` (FTS5 full-text index,
-  BM25), `difflib` (fuzzy cue matching), `dataclasses`, `re`, `math`, `unittest` (57 tests)
+  BM25), `difflib` (fuzzy cue matching), `dataclasses`, `re`, `math`, `unittest` (61 tests)
 - Optional accelerators (off by default, declared in `starter/requirements.txt`):
   `rapidfuzz` (fuzzy matching speed-up), `anthropic` (the opt-in phrasing layer)
 - Deliberately **no** PyTorch / Transformers / vector database — the rules require
@@ -91,8 +91,11 @@ The public simulator is deterministic and visible — the discipline was refusin
 overfit it. We removed behaviors that scored points only through simulator structure
 (re-asking answered attributes, leaning on the catch-all "other" question), costing a
 measured −0.013 public score, and validated the trade with a grouped holdout split and
-31 adversarial semantics tests (negation, mixed clauses, category switches, typed
-budgets) that the public set never exercises.
+a battery of adversarial semantics tests (negation, mixed clauses, category switches,
+typed budgets) that the public set never exercises. Demo rehearsal then exposed further
+free-form ranking bugs the evaluator never triggers; fixing them (category anchoring,
+unknown-price credit) recovered the score to 0.8264 without re-introducing the
+overfitting behaviors.
 
 ## What's next
 
@@ -102,10 +105,11 @@ trace, and a learned reranker gated on holdout — not public — gains.
 
 ## Team
 
-[[FILL: team name, member names, and one line per member on what they contributed —
-or state that this is a solo submission.]]
+Team **KE$HA** — Wang Zilu, Lim Wei Feng Leo, Guan Chen Di, Dylan Yap, Damien Tan.
+All members contributed across design, implementation, review, and submission preparation,
+with Claude Code (Anthropic) used as an AI pair-programming tool throughout.
 
 ## Links
 
-- Public repository: [[FILL: GitHub URL of the team fork after pushing]]
+- Public repository: https://github.com/IcySnowy16/TiktokTechjam
 - Demo video: [[FILL: public YouTube URL]]
