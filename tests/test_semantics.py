@@ -434,3 +434,84 @@ class ProfileRobustnessTest(unittest.TestCase):
     def test_nan_product_rating_scores_zero(self):
         from starter.personalization import rating_prior
         self.assertEqual(rating_prior({"average_rating": float("nan"), "rating_number": 50}, ""), 0.0)
+
+
+class DemoExposedBugsTest(unittest.TestCase):
+    """Bugs surfaced by the free-form demo conversation (tools/demo_session.py)."""
+
+    def test_junk_exclusion_not_filed(self):
+        # "I don't like the look of it" must not exclude 'look'.
+        machine = DialogStateMachine()
+        state = make_state()
+        machine.update(state, "No suede please, I don't like the look of it", 2)
+        excludes = [v.text.lower() for v in state.exclude_values()]
+        self.assertTrue(any("suede" in t for t in excludes), excludes)
+        self.assertFalse(any("look" in t for t in excludes),
+                         f"junk phrase filed as exclusion: {excludes}")
+
+    def test_budget_slot_text_not_in_lexical_query(self):
+        from starter.retriever import HybridRetriever
+        from starter.dialog_state import SlotValue
+
+        class StubCatalog:
+            def idf(self, t): return 1.0
+
+        state = make_state()
+        state.slots["budget"] = [SlotValue("they should stay under $150", turn=2)]
+        retriever = HybridRetriever.__new__(HybridRetriever)
+        retriever.catalog = StubCatalog()
+        terms = retriever._query_terms(state)
+        self.assertNotIn("stay", terms,
+                         "budget operator text polluted the lexical query")
+
+    def test_category_coverage_boosts_on_category_items(self):
+        from starter.retriever import HybridRetriever
+        from starter import config
+
+        class StubCatalog:
+            def idf(self, t): return 1.0
+
+        state = make_state()
+        state.category_terms = ["men", "leather", "shoes"]
+        retriever = HybridRetriever.__new__(HybridRetriever)
+        retriever.catalog = StubCatalog()
+        on_cat = retriever._category_score(state, {"men", "leather", "shoes", "oxford"})
+        off_cat = retriever._category_score(state, {"belt", "buckle", "leather"})
+        self.assertGreater(on_cat, off_cat,
+                           "category coverage must separate shoes from belts")
+        self.assertGreater(config.W_CATEGORY, 0)
+
+
+class UnknownPriceTest(unittest.TestCase):
+    def test_unknown_price_gets_partial_budget_credit(self):
+        """A stated budget must not zero out candidates with missing prices —
+        unknown is not a violation (demo-measured: cheap junk with known prices
+        outranked the correct category match whose price field was empty)."""
+        from starter.retriever import HybridRetriever
+        from starter.attribute_extractor import Budget
+
+        class StubAttrs:
+            material = set(); color = set(); size = set()
+            style = set(); use_case = set()
+            def __init__(self, price): self.price = price
+            def values_for(self, a): return getattr(self, a, set()) or set()
+
+        class StubCatalog:
+            def __init__(self): self.attrs = {}
+            def get_attributes(self, asin): return self.attrs[asin]
+            def idf(self, t): return 1.0
+
+        retriever = HybridRetriever.__new__(HybridRetriever)
+        catalog = StubCatalog()
+        retriever.catalog = catalog
+        state = make_state()
+        budget = Budget(max=150.0)
+        catalog.attrs = {"known": StubAttrs(20.0), "unknown": StubAttrs(None), "over": StubAttrs(400.0)}
+        known = retriever._attribute_score(state, "known", set(), budget, False)
+        unknown = retriever._attribute_score(state, "unknown", set(), budget, False)
+        over = retriever._attribute_score(state, "over", set(), budget, False)
+        self.assertGreater(unknown, 0.0)
+        # Only VIOLATIONS move ranking: unknown price is not evidence of
+        # non-compliance, so it earns no less than a verified-satisfied price.
+        self.assertGreaterEqual(known, unknown)
+        self.assertGreater(unknown, over)

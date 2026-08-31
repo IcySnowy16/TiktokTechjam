@@ -41,6 +41,8 @@ class HybridRetriever:
                 scores[asin] -= config.W_EXCLUDE * self._exclusion_violation(
                     exclude_values, doc_tokens
                 )
+            if config.W_CATEGORY > 0 and state.category_terms:
+                scores[asin] += self._category_score(state, doc_tokens)
             if config.W_ATTR > 0 and (slot_values or budget is not None):
                 scores[asin] += config.W_ATTR * self._attribute_score(
                     state, asin, doc_tokens, budget, relax
@@ -69,8 +71,12 @@ class HybridRetriever:
         messages - with every excluded token removed (raw messages would
         otherwise smuggle negated terms back in)."""
         terms: list[str] = list(state.category_terms)
-        for value in state.include_values():
-            terms.extend(tokenize(value.text))
+        for attribute, values in state.slots.items():
+            if attribute == "budget":
+                continue  # operator text ("stay under $150"), not lexical evidence
+            for value in values:
+                if value.active and value.polarity == "include":
+                    terms.extend(tokenize(value.text))
         for message in state.utterance_log[-2:]:
             terms.extend(tokenize(message))
         excluded = state.excluded_tokens()
@@ -119,6 +125,13 @@ class HybridRetriever:
             total_weight += value.weight
         return accumulated / total_weight if total_weight > 0 else 0.0
 
+    def _category_score(self, state: SessionState, doc_tokens: set[str]) -> float:
+        """Anchor ranking to WHAT the customer is shopping for. Without this, a
+        flat bonus (e.g. budget satisfied) lets any cheap off-category item —
+        a belt when they asked for shoes — outrank the category (demo-exposed)."""
+        coverage = idf_coverage(state.category_terms, doc_tokens, self.catalog.idf)
+        return config.W_CATEGORY * coverage
+
     def _exclusion_violation(self, exclude_values, doc_tokens: set[str]) -> float:
         """How strongly a candidate matches what the customer ruled OUT (0..1)."""
         worst = 0.0
@@ -165,8 +178,10 @@ class HybridRetriever:
                 score += config.ATTR_MATCH_BONUS
             elif have:
                 score -= penalty
-        if budget is not None and attributes.price is not None:
-            if budget.satisfied(attributes.price):
+        if budget is not None:
+            if attributes.price is None:
+                score += config.UNKNOWN_PRICE_CREDIT * config.ATTR_MATCH_BONUS
+            elif budget.satisfied(attributes.price):
                 score += config.ATTR_MATCH_BONUS
             elif budget.violated(attributes.price):
                 score -= penalty

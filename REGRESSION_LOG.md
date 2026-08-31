@@ -25,3 +25,15 @@ Lessons recorded:
   deliberate robustness-over-public-score trade inside the gate.
 
 Holdout (grouped by target ASIN, never tuned on): dev n=161 -> 0.815754, holdout n=39 -> 0.845791. No gap; no overfitting signal.
+
+Demo-exposed fixes (2026-08-31): free-form demo rehearsal (tools/demo_session.py)
+revealed ranking failures the evaluator never triggers — flat budget bonus let
+cheap off-category items (a $5.99 ear cuff) outrank category matches whose price
+field is missing; junk exclusions ("the look of it"); budget operator text
+polluting the lexical query. Fixes: W_CATEGORY idf-coverage anchor, substantive-
+exclusion filter, budget slot excluded from query terms.
+| + category anchor (W_CATEGORY=1.5) + exclusion/budget-query fixes | 60 pass | 0.826420 | 0.975 | 0.592732 | 2.945 | UP from 0.8216; browsing HR hit 1.0 |
+| + W_CATEGORY 1.5→3.0 + category filler-token filter | 60 pass | pending | | | | gate + holdout + demo rerun |
+| + W_CATEGORY 3.0 experiment | 60 pass | 0.823665 | 0.975 | 0.584216 | 2.955 | REVERTED: worse on public AND demo turn 5 |
+| + numeric-token skip experiment | 61 pass | 0.823939 | 0.975 | 0.584129 | 2.940 | REVERTED: -0.0025 public, no demo gain |
+| + unknown-price credit 1.0 (SHIPPED) | 61 pass | 0.826420 | 0.975 | 0.592732 | 2.945 | only violations move ranking; browsing HR 1.0; demo turns 1-5 all rank on-category |

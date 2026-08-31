@@ -21,6 +21,10 @@ W_TFIDF = 0.5     # M4: idf-weighted query coverage (Stage D)
 W_PERSONAL = 0.3  # M4: preference_tags boost (Stage E)
 W_RATING = 0.15   # M4: rating prior tie-breaker (Stage E)
 
+W_CATEGORY = 1.5  # idf-coverage of the shopping category in the candidate's text -
+                  # anchors ranking so cheap off-category items can't win on flat
+                  # bonuses (3.0 measured WORSE on public+demo; missing-price
+                  # asymmetry was the real culprit - see UNKNOWN_PRICE_CREDIT)
 W_EXCLUDE = 1.5   # penalty weight for matching an excluded (negated) constraint
 EXCLUDE_COVERAGE_MIN = 0.5  # coverage of an excluded phrase below this is ignored
 
@@ -28,6 +32,11 @@ SHORTLIST_SIZE = 300        # Stage-A BM25 recall depth
 MAX_QUERY_TERMS = 60        # cap on FTS5 OR-query terms
 ATTR_MATCH_BONUS = 1.0
 ATTR_CONTRADICT_PENALTY = 0.5
+UNKNOWN_PRICE_CREDIT = 1.0  # budget stated but candidate price unknown: full
+                            # credit - only VIOLATIONS move ranking; an
+                            # unverifiable price is not evidence of
+                            # non-compliance (0.5 still let cheap junk with
+                            # known prices outrank true matches - demo-measured)
 BUDGET_TOLERANCE = 0.35     # price within +/-35% of stated budget counts as a match
 OVERRIDE_NEW_VALUE_WEIGHT = 2.0
 STALE_VALUE_DECAY = 0.5     # multiplier applied to pre-override slot values

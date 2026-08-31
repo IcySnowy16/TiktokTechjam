@@ -249,6 +249,20 @@ class DialogStateMachine:
             return cls._ATTRIBUTE_ALIASES.get(name, name)
         return state.last_ask_attribute
 
+    @staticmethod
+    def _is_substantive_exclusion(text: str) -> bool:
+        """An exclusion must name something concrete. Vague complaint tails like
+        'the look of it' (from "I don't like the look of it") carry no product
+        constraint and would penalize arbitrary candidates."""
+        from .text_utils import tokenize
+        from .vocab import COLORS, MATERIALS, SIZE_TERMS, STYLE_TERMS, USE_CASE_TERMS
+        tokens = set(tokenize(text))
+        vocabulary = MATERIALS | COLORS | SIZE_TERMS | STYLE_TERMS | USE_CASE_TERMS
+        if tokens & vocabulary:
+            return True
+        junk = {"look", "looks", "thing", "things", "stuff", "kind", "sort", "type", "one", "ones"}
+        return len(tokens - junk) >= 2
+
     @classmethod
     def _is_informative(cls, text: str) -> bool:
         from .text_utils import tokenize
@@ -293,7 +307,7 @@ class DialogStateMachine:
                 before = clause[: match.start()].strip(" .;,")
                 after = clause[match.end():].strip(" .;,")
                 after = cls._NEGATION_LEAD_RE.sub("", after).strip()
-                if after:
+                if after and cls._is_substantive_exclusion(after):
                     results.append((after, "exclude"))
                 # Leading fragments like "I do" / "please" carry no constraint.
                 if before and len(tokenize(before)) >= 2:
@@ -317,7 +331,10 @@ class DialogStateMachine:
         match = _CATEGORY_RE.search(message)
         if match:
             from .text_utils import tokenize
-            state.category_terms = tokenize(match.group(1))
+            # Filler verbs in "shoes I can wear to the office" dilute the
+            # category anchor; keep the nouns that identify the product.
+            junk = {"can", "wear", "use", "need", "want", "buy", "get", "find", "go"}
+            state.category_terms = [t for t in tokenize(match.group(1)) if t not in junk]
         if ":" in message:
             payload = self._payload(message)
             for piece in self._split_constraints(payload):
