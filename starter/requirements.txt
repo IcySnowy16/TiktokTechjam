@@ -1,0 +1,11 @@
+# The agent runs on the Python 3.10+ standard library alone (including sqlite3
+# with FTS5). Nothing below is required; each is an optional enhancement and the
+# agent silently degrades without it.
+#
+# Optional fuzzy-matching accelerator (difflib fallback is built in):
+# rapidfuzz>=3.0
+#
+# Optional LLM phrasing layer (template fallback is built in; requires
+# ANTHROPIC_API_KEY at runtime; final scoring may run offline, where the agent
+# runs at full technical strength without it):
+# anthropic>=0.40
