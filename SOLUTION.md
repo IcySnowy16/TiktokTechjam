@@ -53,17 +53,27 @@ it with a stateful pipeline, run on every turn:
 | + reveal-prior × entropy question policy (M2) | 0.770 | 0.915 | 0.561 | 3.80 |
 | + phrase-coverage & attribute stages (M3) | 0.817 | 0.965 | 0.588 | 3.08 |
 | + TF-IDF & personalization (M4) | 0.835 | 0.975 | 0.609 | 2.77 |
-| + semantics hardening (shipped) | **0.822** | **0.965** | **0.600** | **3.05** |
+| + semantics hardening | 0.822 | 0.965 | 0.600 | 3.05 |
+| + demo-driven ranking fixes (shipped) | **0.826** | **0.975** | **0.593** | **2.95** |
 
-Per-scenario at shipped state (HR@10 / MTTC): Buying 0.963 / 2.76, Browsing 0.988 / 2.64,
+Per-scenario at shipped state (HR@10 / MTTC): Buying 0.975 / 2.64, Browsing 1.000 / 2.51,
 Intent Override 0.933 / 4.60, Boundary 0.900 / 3.90. Identical results measured under
-`PYTHONHASHSEED=0` and `=42`.
+different `PYTHONHASHSEED` values.
+
+A third measurement source beyond the evaluator and the holdout: rehearsing the demo
+(`tools/demo_session.py`, a scripted free-form conversation) exposed ranking failures the
+templated evaluator never triggers — a flat budget bonus let cheap off-category items with
+known prices outrank correct matches whose price field was missing. Fixes (category-coverage
+anchor, exclusion substance filter, full credit for unverifiable prices — only violations
+move ranking) raised the public score from 0.8216 to 0.8264 and are individually logged,
+including the two experiments that measured worse and were reverted.
 
 **Why shipped < M4, on purpose.** The hardening pass (negation, mixed clauses, scoped overrides,
 typed budgets, deterministic questions) deliberately removed two behaviors that scored points
 only because of visible simulator structure: re-asking attributes the customer had already
 answered, and leaning on the catch-all `other` question (now capped at 1/session). Together
-these were worth about +0.013 public score (0.8342 → 0.8216 measured). The public simulator never emits negation, mixed
+these were worth about +0.013 public score (0.8342 → 0.8216 measured; demo-driven ranking
+fixes later recovered to 0.8264 without re-introducing either behavior). The public simulator never emits negation, mixed
 clauses, or budget operators, so these fixes cannot raise the public score — they exist to
 protect behavior on the 800 private sessions, which may paraphrase more freely.
 

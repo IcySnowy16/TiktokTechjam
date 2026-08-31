@@ -37,3 +37,8 @@ exclusion filter, budget slot excluded from query terms.
 | + W_CATEGORY 3.0 experiment | 60 pass | 0.823665 | 0.975 | 0.584216 | 2.955 | REVERTED: worse on public AND demo turn 5 |
 | + numeric-token skip experiment | 61 pass | 0.823939 | 0.975 | 0.584129 | 2.940 | REVERTED: -0.0025 public, no demo gain |
 | + unknown-price credit 1.0 (SHIPPED) | 61 pass | 0.826420 | 0.975 | 0.592732 | 2.945 | only violations move ranking; browsing HR 1.0; demo turns 1-5 all rank on-category |
+Seed-determinism re-verified on the SHIPPED config (0.826420): identical output
+under PYTHONHASHSEED=0 and =7.
+Local tiktokfiles.zip (Aug 29 copy of Leo's folder) scanned against all 200
+public target ASINs + sample ids: entirely clean. The exposed public_0001
+answer exists only in Leo's newer local copy on his machine — his fix.
