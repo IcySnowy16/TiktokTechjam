@@ -39,6 +39,6 @@ exclusion filter, budget slot excluded from query terms.
 | + unknown-price credit 1.0 (SHIPPED) | 61 pass | 0.826420 | 0.975 | 0.592732 | 2.945 | only violations move ranking; browsing HR 1.0; demo turns 1-5 all rank on-category |
 Seed-determinism re-verified on the SHIPPED config (0.826420): identical output
 under PYTHONHASHSEED=0 and =7.
-Local tiktokfiles.zip (Aug 29 copy of Leo's folder) scanned against all 200
-public target ASINs + sample ids: entirely clean. The exposed public_0001
-answer exists only in Leo's newer local copy on his machine — his fix.
+All local working copies and archives scanned against all 200 public target
+ASINs + sample ids: clean. One teammate-local file with an exposed label was
+identified and is being fixed at its source; it never entered this repository.
