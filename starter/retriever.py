@@ -25,8 +25,9 @@ class HybridRetriever:
             return []
 
         scores = dict(self._normalize(shortlist, config.W_BM25))
-        slot_values = state.all_slot_values()
-        budget = state.budget_value() if config.W_ATTR > 0 else None
+        slot_values = state.include_values()
+        exclude_values = state.exclude_values()
+        budget = state.budget_spec() if config.W_ATTR > 0 else None
         tags = state.user_profile.get("preference_tags") or []
         rating_style = str(state.user_profile.get("rating_style") or "")
         query_tokens = self._query_token_list(state) if config.W_TFIDF > 0 else []
@@ -36,6 +37,10 @@ class HybridRetriever:
             doc_tokens = self.catalog.doc_tokens(asin)
             if config.W_PHRASE > 0 and slot_values:
                 scores[asin] += config.W_PHRASE * self._phrase_score(slot_values, doc_tokens)
+            if config.W_EXCLUDE > 0 and exclude_values:
+                scores[asin] -= config.W_EXCLUDE * self._exclusion_violation(
+                    exclude_values, doc_tokens
+                )
             if config.W_ATTR > 0 and (slot_values or budget is not None):
                 scores[asin] += config.W_ATTR * self._attribute_score(
                     state, asin, doc_tokens, budget, relax
@@ -60,17 +65,22 @@ class HybridRetriever:
     # -- query construction ------------------------------------------------
 
     def _query_terms(self, state: SessionState) -> list[str]:
-        """Cumulative query: category + every active slot value + recent messages."""
+        """Cumulative positive query: category + active include values + recent
+        messages - with every excluded token removed (raw messages would
+        otherwise smuggle negated terms back in)."""
         terms: list[str] = list(state.category_terms)
-        for value in state.all_slot_values():
+        for value in state.include_values():
             terms.extend(tokenize(value.text))
         for message in state.utterance_log[-2:]:
             terms.extend(tokenize(message))
+        excluded = state.excluded_tokens()
+        if excluded:
+            terms = [term for term in terms if term not in excluded]
         return terms
 
     def _query_token_list(self, state: SessionState) -> list[str]:
         seen: dict[str, None] = {}
-        for value in state.all_slot_values():
+        for value in state.include_values():
             for token in tokenize(value.text):
                 seen.setdefault(token, None)
         for token in state.category_terms:
@@ -102,17 +112,31 @@ class HybridRetriever:
             coverage = idf_coverage(phrase_tokens, doc_tokens, self.catalog.idf)
             if coverage < config.PHRASE_MIN_COVERAGE:
                 coverage = 0.0
+            # Recency multiplies the CONTRIBUTION only — putting it in the
+            # denominator too made it cancel exactly for a lone override value.
             recency = 1.3 if value.weight >= config.OVERRIDE_NEW_VALUE_WEIGHT else 1.0
             accumulated += value.weight * recency * coverage
-            total_weight += value.weight * recency
+            total_weight += value.weight
         return accumulated / total_weight if total_weight > 0 else 0.0
+
+    def _exclusion_violation(self, exclude_values, doc_tokens: set[str]) -> float:
+        """How strongly a candidate matches what the customer ruled OUT (0..1)."""
+        worst = 0.0
+        for value in exclude_values:
+            phrase_tokens = tokenize(value.text)
+            if not phrase_tokens:
+                continue
+            coverage = idf_coverage(phrase_tokens, doc_tokens, self.catalog.idf)
+            if coverage >= config.EXCLUDE_COVERAGE_MIN and coverage > worst:
+                worst = coverage
+        return worst
 
     def _attribute_score(
         self,
         state: SessionState,
         asin: str,
         doc_tokens: set[str],
-        budget: float | None,
+        budget,  # Budget | None (typed operators: min/max/range/target)
         relax: bool,
     ) -> float:
         """Stage B: soft match bonus / contradiction penalty per typed slot. Never a hard filter."""
@@ -122,21 +146,29 @@ class HybridRetriever:
         for attribute, values in state.slots.items():
             if attribute in ("feature", "other", "category", "brand", "budget"):
                 continue
-            disclosed_tokens: set[str] = set()
+            wanted: set[str] = set()
+            unwanted: set[str] = set()
             for value in values:
-                disclosed_tokens.update(tokenize(value.text))
-            wanted = disclosed_tokens & self._vocab_for(attribute)
+                if not value.active:
+                    continue
+                target = wanted if value.polarity == "include" else unwanted
+                target.update(tokenize(value.text))
+            vocabulary = self._vocab_for(attribute)
+            wanted &= vocabulary
+            unwanted &= vocabulary
+            have = attributes.values_for(attribute)
+            if unwanted & have:
+                score -= penalty
             if not wanted:
                 continue
-            have = attributes.values_for(attribute)
             if wanted & have:
                 score += config.ATTR_MATCH_BONUS
             elif have:
                 score -= penalty
         if budget is not None and attributes.price is not None:
-            if abs(attributes.price - budget) <= config.BUDGET_TOLERANCE * budget:
+            if budget.satisfied(attributes.price):
                 score += config.ATTR_MATCH_BONUS
-            elif attributes.price > budget * (1 + config.BUDGET_TOLERANCE):
+            elif budget.violated(attributes.price):
                 score -= penalty
         return score
 

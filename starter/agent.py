@@ -8,6 +8,7 @@ BM25-only query, then to a static valid response, so respond() never raises.
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 
 from . import config
@@ -39,7 +40,16 @@ class Agent:
 
     def respond(self, session_id: str, user_message: str, turn: int, top_k: int) -> dict:
         try:
-            return self._respond_impl(session_id, user_message, turn, top_k)
+            committed = self._sessions.get(session_id)
+            if committed is None:
+                raise RuntimeError("reset must be called before respond")
+            # Transactional turn: mutate a copy; commit only after the full
+            # pipeline succeeded, so a mid-turn failure never leaves partial
+            # conversation state behind.
+            working = copy.deepcopy(committed)
+            response = self._respond_impl(working, user_message, turn, top_k)
+            self._sessions[session_id] = working
+            return response
         except Exception:
             try:
                 return self._bm25_fallback(user_message, top_k)
@@ -50,14 +60,10 @@ class Agent:
 
     # -- main pipeline -----------------------------------------------------
 
-    def _respond_impl(self, session_id: str, user_message: str, turn: int, top_k: int) -> dict:
-        state = self._sessions.get(session_id)
-        if state is None:
-            raise RuntimeError("reset must be called before respond")
-
+    def _respond_impl(self, state: SessionState, user_message: str, turn: int, top_k: int) -> dict:
         parsed = self.state_machine.update(state, user_message, turn)
         ranked = self.retriever.rank(state, top_k)
-        self._update_stall_detector(state, ranked)
+        self._update_stall_detector(state, ranked, parsed)
 
         ask_attribute = select_ask_attribute(ranked, state, self.catalog)
         if ask_attribute:
@@ -75,7 +81,7 @@ class Agent:
         message = compose(state, ask_attribute, top_product, question_override)
         recommendations = [{"parent_asin": asin} for asin, _ in ranked[:top_k]]
 
-        self.trace_log.session(session_id).record(
+        self.trace_log.session(state.session_id).record(
             turn=turn,
             pool_size=len(ranked),
             ask_attribute=ask_attribute,
@@ -98,11 +104,21 @@ class Agent:
         )
 
     @staticmethod
-    def _update_stall_detector(state: SessionState, ranked: list[tuple[str, float]]) -> None:
+    def _update_stall_detector(state: SessionState, ranked, parsed) -> None:
+        """Stall = the same top candidates keep returning with NO new evidence.
+        Ranking identity (a top-8 ASIN signature), never list length; any new
+        constraint, override, or category change resets the flag."""
         state.pool_size_history.append(len(ranked))
-        history = state.pool_size_history
-        if len(history) >= config.STALL_TURNS and len(set(history[-config.STALL_TURNS:])) == 1:
-            state.relax_filters = True
+        if parsed.filled or parsed.override or parsed.category_changed:
+            state.relax_filters = False
+            state.pool_signatures.clear()
+        signature = tuple(asin for asin, _ in ranked[:8])
+        state.pool_signatures.append(signature)
+        recent = state.pool_signatures[-config.STALL_TURNS:]
+        if len(recent) >= config.STALL_TURNS:
+            base = set(recent[0])
+            if base and all(len(base & set(sig)) >= max(1, int(0.75 * len(base))) for sig in recent[1:]):
+                state.relax_filters = True
 
     # -- fallback tiers ----------------------------------------------------
 

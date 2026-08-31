@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 import sqlite3
-from collections import Counter
+from collections import Counter, OrderedDict
 from pathlib import Path
 
 from . import config
@@ -38,19 +38,35 @@ class CatalogStore:
         self.products: dict[str, dict] = {}
         self._df: Counter[str] = Counter()
         self._doc_count = 0
-        self._token_cache: dict[str, set[str]] = {}
-        self._attr_cache: dict[str, ProductAttributes] = {}
+        # LRU-bounded: only shortlist members are ever cached, but across many
+        # sessions that would otherwise grow toward the whole 50k catalog.
+        self._token_cache: OrderedDict[str, set[str]] = OrderedDict()
+        self._attr_cache: OrderedDict[str, ProductAttributes] = OrderedDict()
+        self._cache_cap = 20000
         self._build()
 
     # -- construction ------------------------------------------------------
 
     def _build(self) -> None:
+        # Fail fast with actionable messages: a missing catalog or an sqlite
+        # build without FTS5 should never surface as a mid-session mystery.
+        if not self.catalog_path.is_file():
+            raise FileNotFoundError(
+                f"catalog not found at '{self.catalog_path}'. Download catalog.jsonl.gz "
+                "from the participant-kit release, decompress, and place it there "
+                "(see data/README.md); verify against SHA256SUMS."
+            )
         cursor = self.connection.cursor()
-        cursor.execute(
-            "CREATE VIRTUAL TABLE products USING fts5("
-            "parent_asin UNINDEXED, title, categories, features, details, store, description, "
-            "tokenize='unicode61 remove_diacritics 2')"
-        )
+        try:
+            cursor.execute(
+                "CREATE VIRTUAL TABLE products USING fts5("
+                "parent_asin UNINDEXED, title, categories, features, details, store, description, "
+                "tokenize='unicode61 remove_diacritics 2')"
+            )
+        except sqlite3.OperationalError as error:
+            raise RuntimeError(
+                "this Python's sqlite3 lacks FTS5 support, which the agent requires"
+            ) from error
         batch: list[tuple[str, str, str, str, str, str, str]] = []
         with self.catalog_path.open(encoding="utf-8") as handle:
             for line in handle:
@@ -76,6 +92,8 @@ class CatalogStore:
         if batch:
             cursor.executemany("INSERT INTO products VALUES (?, ?, ?, ?, ?, ?, ?)", batch)
         self.connection.commit()
+        if not self.products:
+            raise ValueError(f"catalog at '{self.catalog_path}' is empty")
         self.catalog_ids: frozenset[str] = frozenset(self.products)
 
     # -- lookups -----------------------------------------------------------
@@ -103,6 +121,10 @@ class CatalogStore:
         if cached is None:
             cached = set(tokenize(searchable_text(self.products.get(asin, {}))))
             self._token_cache[asin] = cached
+            if len(self._token_cache) > self._cache_cap:
+                self._token_cache.popitem(last=False)
+        else:
+            self._token_cache.move_to_end(asin)
         return cached
 
     def get_attributes(self, asin: str) -> ProductAttributes:
@@ -110,6 +132,10 @@ class CatalogStore:
         if cached is None:
             cached = extract(self.products.get(asin, {}), self.doc_tokens(asin))
             self._attr_cache[asin] = cached
+            if len(self._attr_cache) > self._cache_cap:
+                self._attr_cache.popitem(last=False)
+        else:
+            self._attr_cache.move_to_end(asin)
         return cached
 
     def idf(self, term: str) -> float:

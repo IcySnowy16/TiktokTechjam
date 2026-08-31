@@ -58,11 +58,14 @@ class OverrideDetectionTest(unittest.TestCase):
             filled_attrs = [attribute for attribute, _ in parsed.filled]
             self.assertEqual(len(filled_attrs), 1, msg=phrase)
             new_attr = filled_attrs[0]
-            values = state.slots[new_attr]
-            self.assertEqual(len(values), 1, msg=phrase)
-            self.assertIn("black leather boots", values[0].text, msg=phrase)
+            # Scoped-override contract: old values in the same slot are
+            # deactivated (kept for traceability); exactly one ACTIVE value
+            # remains and it is the new one.
+            active = [v for v in state.slots[new_attr] if v.active]
+            self.assertEqual(len(active), 1, msg=phrase)
+            self.assertIn("black leather boots", active[0].text, msg=phrase)
 
-    def test_override_leaves_other_slots_intact_but_decayed(self):
+    def test_attribute_local_override_leaves_other_slots_untouched(self):
         machine = DialogStateMachine()
         state = make_state()
         state.last_ask_attribute = "budget"
@@ -70,7 +73,9 @@ class OverrideDetectionTest(unittest.TestCase):
         state.last_ask_attribute = None
         machine.update(state, "Scratch that, what I need is: red cotton dress.", turn=3)
         self.assertIn("budget", state.slots)
-        self.assertLess(state.slots["budget"][0].weight, 1.2)
+        # Unrelated slots are neither decayed nor deactivated by a local override.
+        self.assertEqual(state.slots["budget"][0].weight, 1.2)
+        self.assertTrue(state.slots["budget"][0].active)
 
 
 class RegularReplyTest(unittest.TestCase):

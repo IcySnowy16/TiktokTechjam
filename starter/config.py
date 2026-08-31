@@ -7,7 +7,7 @@ ADAPTIVE_QUESTIONS = True  # False = fixed priority order (M1); True = entropy/c
 FIXED_QUESTION_ORDER = [
     "material", "color", "feature", "budget", "style", "size", "use_case", "other",
 ]
-MAX_ASKS_PER_ATTRIBUTE = {"other": 3, "feature": 2}
+MAX_ASKS_PER_ATTRIBUTE = {"other": 1, "feature": 2}  # "other" is a last resort (ablation in SOLUTION.md)
 DEFAULT_MAX_ASKS = 1
 MAX_QUESTION_TURN = 8       # no new questions after this turn
 CONFIDENT_POOL_SIZE = 3     # pool at or below this -> stop asking
@@ -20,6 +20,9 @@ W_PHRASE = 3.0    # M3: disclosed-phrase idf-coverage boost (Stage C) — the do
 W_TFIDF = 0.5     # M4: idf-weighted query coverage (Stage D)
 W_PERSONAL = 0.3  # M4: preference_tags boost (Stage E)
 W_RATING = 0.15   # M4: rating prior tie-breaker (Stage E)
+
+W_EXCLUDE = 1.5   # penalty weight for matching an excluded (negated) constraint
+EXCLUDE_COVERAGE_MIN = 0.5  # coverage of an excluded phrase below this is ignored
 
 SHORTLIST_SIZE = 300        # Stage-A BM25 recall depth
 MAX_QUERY_TERMS = 60        # cap on FTS5 OR-query terms

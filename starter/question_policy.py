@@ -26,14 +26,29 @@ def _max_asks(attribute: str) -> int:
     return config.MAX_ASKS_PER_ATTRIBUTE.get(attribute, config.DEFAULT_MAX_ASKS)
 
 
+# Typed attributes with an active answer are never re-asked; catch-all buckets
+# ("feature", "other") can legitimately hold several values.
+_SKIP_WHEN_KNOWN = ("category", "material", "color", "size", "style", "brand", "budget")
+
+
 def _askable(state: SessionState) -> list[str]:
-    candidates = set(config.FIXED_QUESTION_ORDER)
-    candidates -= state.boundary_attributes
-    candidates -= state.exhausted_attributes
-    return [
-        attribute for attribute in candidates
-        if state.asked_attributes.get(attribute, 0) < _max_asks(attribute)
-    ]
+    """Askable attributes in FIXED_QUESTION_ORDER — an ordered list, never
+    set-iteration order, so selection is identical across hash seeds."""
+    askable: list[str] = []
+    for attribute in config.FIXED_QUESTION_ORDER:
+        if attribute in state.boundary_attributes:
+            continue
+        if attribute in state.exhausted_attributes:
+            continue
+        if state.asked_attributes.get(attribute, 0) >= _max_asks(attribute):
+            continue
+        if attribute in _SKIP_WHEN_KNOWN and any(
+            value.active and value.polarity == "include"
+            for value in state.slots.get(attribute, [])
+        ):
+            continue
+        askable.append(attribute)
+    return askable
 
 
 def _should_stop(state: SessionState, ranked_pool: list[tuple[str, float]]) -> bool:
@@ -67,11 +82,15 @@ def select_ask_attribute(
 
     pool = [asin for asin, _ in ranked_pool[:_ENTROPY_POOL_CAP]]
     if not pool:
-        return max(askable, key=lambda a: _REVEAL_PRIOR.get(a, 0.0))
+        # Deterministic: prior first, fixed order breaks exact ties.
+        return max(
+            askable,
+            key=lambda a: (_REVEAL_PRIOR.get(a, 0.0), -config.FIXED_QUESTION_ORDER.index(a)),
+        )
 
     best_attribute: str | None = None
-    best_score = 0.0
-    for attribute in askable:
+    best_key: tuple[float, int] | None = None
+    for order_index, attribute in enumerate(askable):
         if attribute in _ENTROPY_ATTRIBUTES:
             # Blend so splitting power refines, but never overrides, the reveal
             # prior — a question the card can't answer scores low regardless.
@@ -79,8 +98,11 @@ def select_ask_attribute(
         else:
             splitting = _FIXED_UTILITY.get(attribute, 0.0)
         score = _REVEAL_PRIOR.get(attribute, 0.0) * splitting
-        if score > best_score:
-            best_score = score
+        # askable is already in FIXED_QUESTION_ORDER, so equal scores resolve
+        # to the earlier attribute — stable under any hash seed.
+        key = (score, -order_index)
+        if score > 0 and (best_key is None or key > best_key):
+            best_key = key
             best_attribute = attribute
     return best_attribute
 
