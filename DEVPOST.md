@@ -119,7 +119,7 @@ re-introducing the overfitting behaviors.
 - **Determinism is earned, not free**: Python's hash-randomized set ordering made question
   selection vary between runs until we rebuilt tie-breaking on a fixed order.
 
-## What's next for Ten-Turn Shopping Copilot
+## What's next for Hitmaker
 
 Multi-route recall with reciprocal-rank fusion (our single BM25 gate is the known recall
 ceiling), a conversation-replay visualization built on the agent's per-turn decision
