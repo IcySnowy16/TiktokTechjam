@@ -136,4 +136,4 @@ with Claude Code (Anthropic) used as an AI pair-programming tool throughout.
 ## Links
 
 - Public repository: https://github.com/IcySnowy16/TiktokTechjam
-- Demo video: [[FILL: public YouTube URL]]
+- Demo video: https://youtu.be/2UY8_PIC6Yw
